@@ -120,8 +120,56 @@ def plot_numerical_distributions(df: pd.DataFrame, save_path=None):
     plt.close()
 
 
+def plot_outliers_before_after(df: pd.DataFrame, save_path=None):
+    """Vẽ Boxplot so sánh phân phối biến số Trước và Sau khi xử lý Outliers (Capping)."""
+    if save_path is None:
+        save_path = FIGURES_DIR / "03b_outliers_before_after.png"
+
+    df_before = df.copy()
+    if "TotalCharges" in df_before.columns:
+        df_before["TotalCharges"] = pd.to_numeric(df_before["TotalCharges"], errors="coerce").fillna(0)
+
+    # Tính toán AvgChargePerMonth nếu cần
+    if "AvgChargePerMonth" not in df_before.columns and "tenure" in df_before.columns and "TotalCharges" in df_before.columns:
+        df_before["AvgChargePerMonth"] = df_before["TotalCharges"] / (df_before["tenure"] + 1)
+
+    df_after = df_before.copy()
+    
+    num_cols = ["tenure", "MonthlyCharges", "TotalCharges", "AvgChargePerMonth"]
+    num_cols = [c for c in num_cols if c in df_before.columns]
+    
+    for col in num_cols:
+        Q1 = df_after[col].quantile(0.25)
+        Q3 = df_after[col].quantile(0.75)
+        IQR = Q3 - Q1
+        lower = Q1 - 1.5 * IQR
+        upper = Q3 + 1.5 * IQR
+        df_after[col] = np.where(df_after[col] > upper, upper, df_after[col])
+        df_after[col] = np.where(df_after[col] < lower, lower, df_after[col])
+
+    fig, axes = plt.subplots(len(num_cols), 2, figsize=(14, 4 * len(num_cols)))
+    if len(num_cols) == 1:
+        axes = [axes]
+
+    for i, col in enumerate(num_cols):
+        # Before
+        sns.boxplot(x=df_before[col], ax=axes[i][0], color="#e74c3c", width=0.4,
+                    boxprops=dict(edgecolor="black"), medianprops=dict(color="yellow", linewidth=2))
+        axes[i][0].set_title(f"Trước khi Capping: Phân phối của {col}", fontweight="bold", fontsize=11)
+        
+        # After
+        sns.boxplot(x=df_after[col], ax=axes[i][1], color="#2ecc71", width=0.4,
+                    boxprops=dict(edgecolor="black"), medianprops=dict(color="yellow", linewidth=2))
+        axes[i][1].set_title(f"Sau khi Capping (IQR Method): Phân phối của {col}", fontweight="bold", fontsize=11)
+
+    plt.tight_layout()
+    plt.savefig(save_path, bbox_inches="tight")
+    plt.close()
+
+
 def generate_all_eda_plots(df: pd.DataFrame):
     """Chạy toàn bộ quy trình trực quan hóa dữ liệu và xuất biểu đồ."""
     plot_churn_distribution(df)
     plot_categorical_insights(df)
     plot_numerical_distributions(df)
+    plot_outliers_before_after(df)

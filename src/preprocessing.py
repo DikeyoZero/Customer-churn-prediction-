@@ -127,6 +127,34 @@ def encode_features(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def handle_outliers(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Xử lý giá trị ngoại lệ bằng Capping (Winsorization) theo IQR, có log thống kê.
+
+    Lưu ý (kết quả phân tích ở src/outliers.py và run_outliers.py):
+    trên bộ Telco, 4 biến số liên tục KHÔNG có điểm nào vượt hàng rào 1.5*IQR, nên bước này
+    giữ nguyên toàn bộ giá trị; nó đóng vai trò chốt an toàn nếu dữ liệu mới có ngoại lệ.
+    Hàm này học ngưỡng trên toàn bộ df; khi cần tránh rò rỉ dữ liệu, dùng
+    src.outliers.OutlierCapper (fit trên train, transform trên test).
+    """
+    from src.outliers import OUTLIER_COLUMNS, OutlierCapper
+
+    capper = OutlierCapper(columns=OUTLIER_COLUMNS, method="iqr", k=1.5)
+    df_out = capper.fit(df).transform(df)
+
+    print("\n--- BÁO CÁO XỬ LÝ OUTLIERS (IQR METHOD) ---")
+    for col, r in capper.report_.items():
+        total = r["n_below"] + r["n_above"]
+        if total > 0:
+            print(f"[*] {col}: Capping {total} outliers "
+                  f"({r['n_below']} dưới sàn, {r['n_above']} vượt trần). "
+                  f"Khoảng chấp nhận: [{r['lower']:.2f}, {r['upper']:.2f}]")
+        else:
+            print(f"[*] {col}: Không phát hiện Outliers.")
+    print("-------------------------------------------\n")
+    return df_out
+
+
 def preprocess_pipeline(df_raw: pd.DataFrame, save_processed=True) -> pd.DataFrame:
     """
     Quy trình tiền xử lý hoàn chỉnh từ Dữ liệu thô -> Dữ liệu sạch sẵn sàng huấn luyện.
@@ -134,6 +162,7 @@ def preprocess_pipeline(df_raw: pd.DataFrame, save_processed=True) -> pd.DataFra
     df = handle_missing_data(df_raw)
     df = clean_categorical_values(df)
     df = create_features(df)
+    df = handle_outliers(df)
     df = encode_features(df)
 
     if save_processed:

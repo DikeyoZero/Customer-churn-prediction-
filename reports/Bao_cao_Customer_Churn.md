@@ -73,7 +73,71 @@ Trong ngành viễn thông (Telecom), chi phí để tìm kiếm một khách h�
 * `AvgChargePerMonth`: $\text{TotalCharges} / (\text{tenure} + 1)$ nhằm phản ánh mức cước thực tế bình quân qua các tháng.
 * `NumServices`: Tổng số lượng dịch vụ giá trị gia tăng mà khách hàng đăng ký (`PhoneService`, `Streaming`, `OnlineSecurity`,...).
 
-### 3.3. Mã hóa & Chuẩn hóa (Encoding & Scaling)
+### 3.3. Phân tích và Xử lý Giá trị ngoại lệ (Outliers)
+
+> Mã nguồn: `src/outliers.py`, `run_outliers.py`, notebook `04_outliers.ipynb`. Kết quả số liệu: `reports/outlier_analysis/`. Hình: `03b`, `03c`, `03d` trong `reports/figures/`.
+
+#### 3.3.1. Quy trình 4 lớp
+| Lớp | Mục đích | Phương pháp |
+|:---|:---|:---|
+| 1. Đơn biến | Tìm giá trị cực đoan ở từng biến | IQR 1.5, IQR 3.0, Z-score, Modified Z-score (MAD) |
+| 2. Đa biến | Tìm khách hàng bất thường khi xét nhiều biến cùng lúc | Isolation Forest, Local Outlier Factor, Mahalanobis robust (MCD) |
+| 3. Logic nghiệp vụ | Phân biệt *lỗi dữ liệu* với *khách hàng thật* | Kiểm tra `TotalCharges` ≈ `tenure` × `MonthlyCharges`, trùng lặp, giá trị âm |
+| 4. Thực nghiệm | Đo ảnh hưởng của từng cách xử lý tới mô hình | 8 phương án × 3 mô hình × 10 lần chia train/test |
+
+#### 3.3.2. Kết quả phát hiện đơn biến (dữ liệu gốc, 7,043 khách hàng)
+| Biến | Min – Max | Skewness | IQR 1.5 | IQR 3.0 | Z-score > 3 | Modified Z > 3.5 |
+|:---|:---:|:---:|:---:|:---:|:---:|:---:|
+| `tenure` | 0 – 72 | 0.24 | 0 | 0 | 0 | 0 |
+| `MonthlyCharges` | 18.25 – 118.75 | −0.22 | 0 | 0 | 0 | 0 |
+| `TotalCharges` | 18.80 – 8,684.80 | 0.96 | 0 | 0 | 0 | 136 (*) |
+| `AvgChargePerMonth` | 9.18 – 118.97 | −0.01 | 0 | 0 | 0 | 0 |
+
+(*) Dương tính giả: `TotalCharges` lệch phải nên MAD nhỏ so với đuôi phải, khiến khách lâu năm bị đánh dấu oan; không có giá trị nào phi lý.
+
+**Kết luận lớp 1:** Hàng rào IQR 1.5 của các biến nằm hoàn toàn ngoài miền giá trị thực (ví dụ `tenure`: [−60; 124] trong khi dữ liệu chỉ từ 0 đến 72), nên **không có outlier đơn biến**. Điều này khớp với bản chất dữ liệu: `tenure` bị chặn 0–72 tháng và `MonthlyCharges` bị chặn bởi bảng giá dịch vụ.
+
+#### 3.3.3. Kết quả phát hiện đa biến
+| Nhóm bị gắn cờ | Số khách | Tỷ lệ churn | Mô tả |
+|:---|:---:|:---:|:---|
+| Toàn bộ khách hàng | 7,043 | 26.5% | — |
+| Isolation Forest (1%) | 71 | 8.5% | Khách VIP: tenure ≈ 70 tháng, cước ≈ $115 |
+| LOF (1%) | 71 | 47.9% | Chủ yếu khách mới (tenure 0–3 tháng), mật độ thưa |
+| Mahalanobis (MCD) | 346 | 0.6% | Khách lâu năm gói rẻ: tenure ≈ 66, cước ≈ $22 |
+
+Ba thuật toán bắt ba nhóm khác nhau (chỉ 7 khách được ≥ 2 thuật toán cùng gắn cờ, không khách nào đủ cả 3). Mỗi nhóm đều là **phân khúc khách hàng thật**, có tỷ lệ churn khác biệt rõ rệt so với trung bình.
+
+#### 3.3.4. Kiểm tra tính nhất quán
+* Không có dòng trùng lặp, không có giá trị âm, không có `tenure` > 72.
+* Tỷ lệ `TotalCharges / (tenure × MonthlyCharges)` nằm trong [0.69; 1.57], trung vị 1.00; **0 dòng** nằm ngoài [0.5; 2]. 617 dòng lệch khỏi 1.0 theo IQR là do khách đổi gói cước giữa chừng, không phải lỗi nhập liệu.
+
+#### 3.3.5. Thực nghiệm ảnh hưởng tới mô hình
+Thiết kế: 10 lần chia train/test (stratified 80/20, seed khác nhau); mọi ngưỡng và bộ lọc **chỉ học trên tập train** rồi áp lên test; tập test luôn nguyên vẹn. Kiểm định t ghép cặp so với baseline.
+
+| Phương án | LR (AUC) | RF (AUC) | GB (AUC) |
+|:---|:---:|:---:|:---:|
+| A. Không xử lý (baseline) | 0.8459 | 0.8437 | 0.8419 |
+| B. Capping IQR 1.5 (cách đang dùng) | 0.8459 | 0.8437 | 0.8419 |
+| C. Winsorize 1% – 99% | 0.8459 | 0.8440 | 0.8422 |
+| D. Winsorize 5% – 95% | 0.8454 | 0.8441 | 0.8425 |
+| E. Loại outlier Isolation Forest (train) | 0.8459 | 0.8439 | 0.8395 |
+| F. Loại outlier LOF (train) | 0.8459 | 0.8438 | 0.8421 |
+| G. log1p(`TotalCharges`) | **0.8475** | 0.8437 | 0.8419 |
+| H. RobustScaler thay StandardScaler | 0.8459 | 0.8437 | 0.8419 |
+
+* **B trùng khớp tuyệt đối với A** (ΔAUC = 0.0000): xác nhận capping hiện tại không thay đổi giá trị nào.
+* Mọi chênh lệch đều dưới 0.003, nhỏ hơn nhiều so với độ dao động giữa các lần chia (SD ≈ 0.013).
+* Loại outlier bằng Isolation Forest làm giảm AUC của Gradient Boosting (−0.0024), cho thấy việc xóa nhóm VIP làm mất tín hiệu hữu ích.
+* Chỉ `log1p(TotalCharges)` cải thiện Logistic Regression (+0.0016, p = 0.0025). Đây là xử lý *độ lệch phân phối*, không phải xử lý outlier, và mô hình dạng cây không bị ảnh hưởng.
+* Lưu ý: p-value từ 10 lần chia chồng lấn là lạc quan và chưa hiệu chỉnh đa so sánh, chỉ nên coi là gợi ý.
+
+#### 3.3.6. Quyết định xử lý
+1. **Giữ toàn bộ 7,043 khách hàng**, không xóa dòng nào. Các điểm bị gắn cờ đa biến là khách VIP, khách mới và khách gói rẻ, đều mang thông tin về churn.
+2. **Giữ Capping (Winsorization) theo IQR 1.5 như chốt an toàn** trong pipeline; trên dữ liệu hiện tại nó không đổi giá trị nào, nhưng bảo vệ mô hình nếu dữ liệu mới xuất hiện ngoại lệ.
+3. **Chống rò rỉ dữ liệu:** khi tái sử dụng cho mô hình, dùng `OutlierCapper` (học ngưỡng trên train, áp lên test) thay vì tính ngưỡng trên toàn bộ dữ liệu.
+4. Tùy chọn: dùng `log1p(TotalCharges)` cho Logistic Regression (cần cả nhóm đồng ý vì đổi đặc trưng chung).
+
+### 3.4. Mã hóa & Chuẩn hóa (Encoding & Scaling)
 * Biến nhị phân: **Label Encoding** (0/1).
 * Biến đa danh mục (`InternetService`, `Contract`, `PaymentMethod`): **One-Hot Encoding** (`drop_first=True` để tránh đa cộng tuyến Dummy Variable Trap).
 * Chuẩn hóa thang đo: **StandardScaler** ($\mu = 0, \sigma = 1$) áp dụng cho các biến số trước khi đưa vào Logistic Regression.
@@ -132,5 +196,6 @@ Dựa trên kết quả phân tích dữ liệu và mô hình Machine Learning, 
 Đồ án đã hoàn thành toàn diện các mục tiêu đề ra:
 * Chuẩn hóa cấu trúc thư mục dự án theo quy chuẩn Khoa học Dữ liệu.
 * Làm rõ bản chất học thuật của cơ chế dữ liệu khuyết (**MAR**).
+* Phân tích outlier theo 4 lớp (đơn biến, đa biến, logic nghiệp vụ, thực nghiệm): không có outlier cần loại bỏ, giữ nguyên toàn bộ 7,043 mẫu.
 * Xây dựng pipeline tiền xử lý và huấn luyện tự động với 4 mô hình Machine Learning đạt độ phân biệt cao (**ROC-AUC ~ 0.85**).
 * Cung cấp các khuyến nghị kinh doanh có cơ sở thực nghiệm vững chắc.

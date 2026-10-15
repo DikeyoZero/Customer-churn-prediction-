@@ -1,0 +1,11 @@
+{
+  "Số dòng trùng lặp": 0,
+  "Số giá trị âm (tenure/MonthlyCharges/TotalCharges)": 0,
+  "Số dòng tenure = 0": 11,
+  "tenure vượt 72 tháng": 0,
+  "Tỷ lệ TotalCharges / (tenure x MonthlyCharges): min": 0.6893564356435644,
+  "Tỷ lệ ...: trung vị": 1.0,
+  "Tỷ lệ ...: max": 1.5734536082474226,
+  "Số dòng tỷ lệ < 0.5 hoặc > 2 (nghi lỗi nhập liệu)": 0,
+  "Số dòng tỷ lệ ngoài hàng rào IQR (đổi gói cước, hợp lý)": 617
+}

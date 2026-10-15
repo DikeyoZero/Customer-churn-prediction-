@@ -20,18 +20,22 @@ project/
 ├── notebooks/               # Sổ tay Jupyter đánh số theo thứ tự đọc/chạy
 │   ├── 01_explore.ipynb     # Khám phá dữ liệu trực quan & phân phối biến (EDA)
 │   ├── 02_clean.ipynb       # Phân tích giá trị khuyết (MAR) & Tiền xử lý dữ liệu
-│   └── 03_model.ipynb       # Huấn luyện, đánh giá & so sánh 4 mô hình Machine Learning
+│   ├── 03_model.ipynb       # Huấn luyện, đánh giá & so sánh 4 mô hình Machine Learning
+│   └── 04_outliers.ipynb    # Phân tích & xử lý Outlier (đơn biến, đa biến, thực nghiệm)
 ├── src/                     # Các hàm tái sử dụng dạng module chuẩn, không viết code spaghetti
 │   ├── __init__.py
 │   ├── config.py            # Đường dẫn thư mục, danh mục biến và siêu tham số
 │   ├── preprocessing.py     # Quy trình làm sạch, xử lý Missing (MAR) và Encoding
 │   ├── eda.py               # Các hàm trực quan hóa và xuất đồ thị phân tích
-│   └── modeling.py          # Huấn luyện mô hình, K-Fold CV, ROC curve & Feature Importance
+│   ├── modeling.py          # Huấn luyện mô hình, K-Fold CV, ROC curve & Feature Importance
+│   └── outliers.py          # Phát hiện/xử lý Outlier: IQR, Z-score, Isolation Forest, LOF, OutlierCapper
 ├── reports/
 │   ├── figures/             # Toàn bộ biểu đồ xuất bản phục vụ báo cáo (.png)
+│   ├── outlier_analysis/    # Bảng số liệu phân tích Outlier (.csv, .json)
 │   └── Bao_cao_Customer_Churn.md  # Báo cáo tổng kết đồ án chi tiết
 ├── requirements.txt         # Danh sách thư viện và phiên bản tương thích
 ├── main.py                  # Script thực thi toàn bộ pipeline chỉ với 1 câu lệnh
+├── run_outliers.py          # Chạy riêng phần phân tích Outlier (python run_outliers.py)
 └── README.md                # Tài liệu hướng dẫn tái lập dự án từ đầu (File này)
 ```
 
@@ -88,3 +92,6 @@ Nếu muốn xem chi tiết từng bước có kèm giải thích học thuật 
    * Áp dụng `class_weight='balanced'` trong thuật toán và ưu tiên tối ưu **ROC-AUC** cùng **Recall** thay vì Accuracy đơn thuần.
 3. **Mã nguồn Chuẩn Module Hóa (Clean Architecture):**  
    * Tách bạch rõ rệt giữa cấu hình (`config.py`), tiền xử lý (`preprocessing.py`), đồ thị (`eda.py`), và mô hình (`modeling.py`).
+3. **Phân tích Outlier 4 lớp:**  
+   * Đơn biến (IQR, Z-score, MAD), đa biến (Isolation Forest, LOF, Mahalanobis), kiểm tra logic nghiệp vụ và thực nghiệm trên 3 mô hình.
+   * **Kết luận:** không có outlier cần loại bỏ; Capping IQR giữ làm chốt an toàn, ngưỡng học trên tập train để tránh rò rỉ dữ liệu.
